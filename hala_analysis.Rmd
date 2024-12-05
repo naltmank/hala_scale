@@ -1,0 +1,206 @@
+---
+title: "mason analysis"
+author: "Noam Altman-Kurosaki"
+date: "2024-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls()) # clean up
+# install.packages("librarian")
+librarian::shelf(knitr, here, car, glmmTMB, MuMIn, DHARMa, performance, effects, emmeans, ggplot2, ggpubr)
+
+```
+
+
+```{r read data}
+data <- read.csv(here::here("data", "hala_data.csv"), stringsAsFactors = T)
+str(data) 
+# large sapling ratio is numeric, not integer - can't do Poisson
+
+hist(data$Larger_sapling_ratio ) # two notable outliers
+
+# removing both outliers 
+data_sub <- data[data$Larger_sapling_ratio  < 20,]
+
+```
+
+
+```{r fit model}
+mod <- glmmTMB(Larger_sapling_ratio  ~ Hala_scale*Canopy_coverage + Hala_scale*Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+plot(simulateResiduals(mod)) # no issues w/ model assumptions
+summary(mod) # zi component is non-significant (z = 0.31, P = 0.753), low variance in random effects
+Anova(mod)
+#                                 Chisq Df Pr(>Chisq)  
+# Hala_scale                     3.0124  1    0.08263 .
+# Canopy_coverage                0.6114  1    0.43427  
+# Invasive_understory            0.3809  1    0.53712  
+# Hala_scale:Canopy_coverage     0.0256  1    0.87289  
+# Hala_scale:Invasive_understory 0.6820  1    0.40890  
+r.squaredGLMM(mod) # 0.41, 0.41
+
+canopy_effects <- emmip(mod,  Hala_scale ~ Canopy_coverage, at = list(Canopy_coverage = seq(24,100,0.5)), CIs = T, plotit = F)
+understory_effects <- emmip(mod,  Hala_scale ~ Invasive_understory, at = list(Invasive_understory = seq(0,80,1)), CIs = T, plotit = F)
+
+
+
+# repeat with full dataset
+mod_full <- glmmTMB(Larger_sapling_ratio  ~ Hala_scale*Canopy_coverage + Hala_scale*Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data, na.action = na.pass)
+plot(simulateResiduals(mod_full)) # no issues w/ model assumptions
+summary(mod_full) # zi component is non-significant (z = 0.10, P = 0.92), low variance in random effects
+Anova(mod_full)
+
+# Response: Larger_sapling_ratio 
+#                                            Chisq Df Pr(>Chisq)    
+# Hala_scale                      1.4369  1  0.2306403    
+# Canopy_coverage                           1.9091  1  0.1670650    
+# Invasive_understory                       2.1017  1  0.1471308    
+# Hala_scale:Canopy_coverage     13.9282  1  0.0001899 ***
+# Hala_scale:Invasive_understory 10.3167  1  0.0013183 ** 
+r.squaredGLMM(mod_full) # 0.86, 0.86
+
+# extract model estimates
+canopy_effects_full <- emmip(mod_full,  Hala_scale ~ Canopy_coverage, at = list(Canopy_coverage = seq(7,100,0.5)), CIs = T, plotit = F)
+understory_effects_full <- emmip(mod_full,  Hala_scale ~ Invasive_understory, at = list(Invasive_understory = seq(0,80,1)), CIs = T, plotit = F)
+
+
+
+mod_summary <- as.data.frame(model.sel(dredge(mod)))
+View(mod_summary) # top model includes intercept and hala scale
+
+# subset only models where AICc is less than 2
+mod_summary_subset <- mod_summary[mod_summary$delta < 2,]
+
+# write.csv(mod_summary_subset, file = "new_model_no_outliers.csv")
+
+# repeat with full model
+mod_summary_outliers <- as.data.frame(model.sel(dredge(mod_full)))
+# View(mod_summary_outliers) # top model includes all terms and is best by far - next best model is delta of > 4
+
+# rather than subset models where delta is less than 2, just going to subset the top 4 to illustrate the point
+mod_summary_outliers_subset <- mod_summary_outliers[1:4,]
+
+write.csv(mod_summary_outliers_subset, file = "new_model_with_outliers.csv")
+
+
+
+
+
+```
+
+```{r plot models not outliers, fig.height=6, fig.width=12}
+(canopy_plot <- ggplot() +
+  geom_point(data = data_sub, aes(x = Canopy_coverage, y = Larger_sapling_ratio , colour = Hala_scale)) +
+  geom_line(data = canopy_effects, aes(x = Canopy_coverage, y = exp(yvar), colour = Hala_scale)) + 
+  geom_ribbon(data = canopy_effects, aes(x = Canopy_coverage, ymin = exp(LCL), ymax = exp(UCL), fill = Hala_scale), alpha = 0.3) +
+  labs(title = "a.", y = "Larger sapling ratio", x = "Canopy cover (%)") +
+  scale_fill_discrete(name = "Hala Scale") +
+  scale_colour_discrete(name = "Hala Scale") +
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+
+(understory_plot <- ggplot() +
+  geom_point(data = data_sub, aes(x = Invasive_understory, y = Larger_sapling_ratio , colour = Hala_scale)) +
+  geom_line(data = understory_effects, aes(x = Invasive_understory, y = exp(yvar), colour = Hala_scale)) + 
+  geom_ribbon(data = understory_effects,
+              aes(x = Invasive_understory, ymin = exp(LCL), ymax = exp(UCL), fill = Hala_scale), alpha = 0.3) +
+  labs(title = "b.", y = "", x = "Invasive understory") +
+  scale_fill_discrete(name = "Hala Scale") +
+  scale_colour_discrete(name = "Hala Scale") +
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+
+(no_outliers_panel <- ggarrange(canopy_plot, understory_plot, nrow = 1, ncol = 2, legend = "bottom", common.legend = T))
+# ggsave(filename = here::here("output", "no_outliers_model_plot_full.png"),no_outliers_panel, height = 6, width = 13)
+
+# massive confidence intervals make the understory plot largely uninterpretable
+```
+
+```{r plot model with outliers, fig.height = 6, fig.width=12}
+(canopy_plot_full <- ggplot() +
+  geom_point(data = data, aes(x = Canopy_coverage, y = Larger_sapling_ratio , colour = Hala_scale)) +
+  geom_line(data = canopy_effects_full, aes(x = Canopy_coverage, y = exp(yvar), colour = Hala_scale)) + 
+  geom_ribbon(data = canopy_effects_full, aes(x = Canopy_coverage, ymin = exp(LCL), ymax = exp(UCL), fill = Hala_scale), alpha = 0.3) +
+  labs(title = "a.", y = "Larger sapling ratio", x = "Canopy cover (%)") +
+  scale_fill_discrete(name = "Hala Scale") +
+  scale_colour_discrete(name = "Hala Scale") +
+
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+
+(understory_plot_full <- ggplot() +
+  geom_point(data = data, aes(x = Invasive_understory, y = Larger_sapling_ratio , colour = Hala_scale)) +
+  geom_line(data = understory_effects_full, aes(x = Invasive_understory, y = exp(yvar), colour = Hala_scale)) + 
+  geom_ribbon(data = understory_effects_full,
+              aes(x = Invasive_understory, ymin = exp(LCL), ymax = exp(UCL), fill = Hala_scale), alpha = 0.3) +
+  labs(title = "b.", y = "", x = "Invasive understory") +
+  scale_fill_discrete(name = "Hala Scale") +
+  scale_colour_discrete(name = "Hala Scale") +
+
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+
+(outliers_panel <- ggarrange(canopy_plot_full, understory_plot_full, nrow = 1, ncol = 2, legend = "bottom", common.legend = T))
+# uncertainty in invasive understory again makes this meaningless
+# ggsave(filename = here::here("output", "outliers_model_plot_full.png"),outliers_panel, height = 6, width = 13)
+```
