@@ -233,5 +233,94 @@ Anova(mod_hala)
   )
 )
 
-ggsave(filename = here::here("output", "hala_only_plot.png"),hala_plot, height = 10, width = 10)
+# ggsave(filename = here::here("output", "hala_only_plot.png"),hala_plot, height = 10, width = 10)
+```
+
+```{r small sapling model}
+hist(data$Small_sapling_ratio) # bet this is overdispersed
+small_mod_1 <- glmmTMB(Small_sapling_ratio  ~ Hala_scale*Canopy_coverage + Hala_scale*Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+plot(simulateResiduals(small_mod_1)) # no issues
+summary(small_mod_1) # significant zeo inflated component (z = -6.17, P = 6.8E-10)
+
+small_mod_summary <- as.data.frame(model.sel(dredge(small_mod_1)))
+View(small_mod_summary) # top model includes invasive understory and hala scale but no interactions
+
+# subset only models where AICc is less than 2
+small_mod_summary_subset <- small_mod_summary[small_mod_summary$delta < 2,]
+
+# write.csv(small_mod_summary_subset, file = "small_sapling_ratio.csv")
+
+# top model
+small_mod_2 <- glmmTMB(Small_sapling_ratio  ~ Hala_scale + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(small_mod_2) # same results as above for zero inflated component
+Anova(small_mod_2) # X2 = 5.3, P = 0.02
+
+(small_sapling_plot <- ggplot(data) +
+  geom_violin(aes(x = Hala_scale, y = Small_sapling_ratio), draw_quantiles = c(0, 0.25, 0.5, 0.75)) +
+  geom_jitter(aes(x = Hala_scale, y = Small_sapling_ratio), width = 0.1) +
+  labs(y = "Small sapling ratio", x = "Hala scale") +
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+
+# ggsave(filename = here::here("output", "small_sapling_plot.png"),small_sapling_plot, height = 10, width = 10)
+```
+
+```{r pre reproductive sapling model}
+hist(data$Pre.reproductive_ratio) # possible zero inflation?
+reproductive_mod_1 <- glmmTMB(Pre.reproductive_ratio  ~ Hala_scale*Canopy_coverage + Hala_scale*Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+plot(simulateResiduals(reproductive_mod_1)) # no issues a
+summary(reproductive_mod_1) # no significant zero inflation z = -0.524, P = 0.6
+
+reproductive_mod_summary <- as.data.frame(model.sel(dredge(reproductive_mod_1)))
+View(reproductive_mod_summary) # top model includes just canopy cover
+
+# subset only models where AICc is less than 2
+reproductive_mod_summary_subset <- reproductive_mod_summary[reproductive_mod_summary$delta < 2,]
+# write.csv(reproductive_mod_summary_subset, file = "pre_reproductive_ratio.csv")
+
+# top model
+reproductive_mod_2 <- glmmTMB(Pre.reproductive_ratio  ~ Canopy_coverage + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(reproductive_mod_2) # same zero inflated component as before
+Anova(reproductive_mod_2) # X2 = 3.6, P = 0.058
+
+reprod_canopy_effects <- emmip(reproductive_mod_2, ~ Canopy_coverage, at = list(Canopy_coverage = seq(24,100,0.5)), CIs = T, plotit = F)
+
+(pre_reproductive_plot <- ggplot() +
+  geom_point(data = data, aes(x = Canopy_coverage, y = Small_sapling_ratio)) +
+  geom_line(data = reprod_canopy_effects, aes(x = Canopy_coverage, y = exp(yvar))) +
+  geom_ribbon(data = reprod_canopy_effects, aes(x = Canopy_coverage, ymin = exp(LCL), ymax = exp(UCL)), alpha = 0.4) +
+  labs(y = "Small sapling ratio", x = "Hala scale") +
+  theme_classic() + 
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.key.size = unit(1.5, 'cm'),
+        legend.text = element_text(size=25),
+        legend.title = element_text(size=32),
+        axis.line = element_line(colour = "black"),
+        plot.title = element_text(color = "black", size = 32, face = "plain"),
+        axis.text.x = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        axis.text.y = element_text(color = "black", size = 30, hjust = .5, vjust = .5, face = "plain"),
+        axis.title.y = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain"),
+        strip.text.x = element_text(color = "black", size = 32, hjust = .5, vjust = 0, face = "plain")
+  )
+)
+# ggsave(filename = here::here("output", "pre_reproductive_plot.png"),pre_reproductive_plot, height = 10, width = 10)
 ```
