@@ -41,23 +41,7 @@ r.squaredGLMM(mod) # 0.41, 0.41
 
 canopy_effects <- emmip(mod,  Hala_scale ~ Canopy_coverage, at = list(Canopy_coverage = seq(24,100,0.5)), CIs = T, plotit = F)
 understory_effects <- emmip(mod,  Hala_scale ~ Invasive_understory, at = list(Invasive_understory = seq(0,80,1)), CIs = T, plotit = F)
-emmeans(mod, ~ Canopy_coverage | Hala_scale)
-# Hala_scale = N:
-#  Canopy_coverage emmean    SE  df asymp.LCL asymp.UCL
-#             86.6  1.017 0.303 Inf     0.424      1.61
-# 
-# Hala_scale = Y:
-#  Canopy_coverage emmean    SE  df asymp.LCL asymp.UCL
-#             86.6 -0.254 0.660 Inf    -1.547      1.04
 
-emmeans(mod, ~ Invasive_understory | Hala_scale)
-# Hala_scale = N:
-#  Invasive_understory emmean    SE  df asymp.LCL asymp.UCL
-#                 8.67  1.017 0.303 Inf     0.424      1.61
-# 
-# Hala_scale = Y:
-#  Invasive_understory emmean    SE  df asymp.LCL asymp.UCL
-#                 8.67 -0.254 0.660 Inf    -1.547      1.04
 
 
 # repeat with full dataset
@@ -74,6 +58,18 @@ Anova(mod_full)
 # Hala_scale:Canopy_coverage     13.9282  1  0.0001899 ***
 # Hala_scale:Invasive_understory 10.3167  1  0.0013183 ** 
 r.squaredGLMM(mod_full) # 0.86, 0.86
+
+# general trends - slopes
+emtrends(mod_full, ~ Hala_scale, var = "Canopy_coverage")
+# Hala_scale Canopy_coverage.trend     SE  df asymp.LCL asymp.UCL
+# N                        -0.0381 0.0108 Inf  -0.05928   -0.0169
+# Y                         0.0220 0.0119 Inf  -0.00141    0.0454
+
+emtrends(mod_full, ~ Hala_scale, var = "Invasive_understory")
+# Hala_scale Invasive_understory.trend     SE  df asymp.LCL asymp.UCL
+# N                             0.0114 0.0200 Inf   -0.0278    0.0506
+# Y                             0.2602 0.0748 Inf    0.1135    0.4068
+
 
 # extract model estimates
 canopy_effects_full <- emmip(mod_full,  Hala_scale ~ Canopy_coverage, at = list(Canopy_coverage = seq(7,100,0.5)), CIs = T, plotit = F)
