@@ -41,7 +41,23 @@ r.squaredGLMM(mod) # 0.41, 0.41
 
 canopy_effects <- emmip(mod,  Hala_scale ~ Canopy_coverage, at = list(Canopy_coverage = seq(24,100,0.5)), CIs = T, plotit = F)
 understory_effects <- emmip(mod,  Hala_scale ~ Invasive_understory, at = list(Invasive_understory = seq(0,80,1)), CIs = T, plotit = F)
+emmeans(mod, ~ Canopy_coverage | Hala_scale)
+# Hala_scale = N:
+#  Canopy_coverage emmean    SE  df asymp.LCL asymp.UCL
+#             86.6  1.017 0.303 Inf     0.424      1.61
+# 
+# Hala_scale = Y:
+#  Canopy_coverage emmean    SE  df asymp.LCL asymp.UCL
+#             86.6 -0.254 0.660 Inf    -1.547      1.04
 
+emmeans(mod, ~ Invasive_understory | Hala_scale)
+# Hala_scale = N:
+#  Invasive_understory emmean    SE  df asymp.LCL asymp.UCL
+#                 8.67  1.017 0.303 Inf     0.424      1.61
+# 
+# Hala_scale = Y:
+#  Invasive_understory emmean    SE  df asymp.LCL asymp.UCL
+#                 8.67 -0.254 0.660 Inf    -1.547      1.04
 
 
 # repeat with full dataset
@@ -80,7 +96,7 @@ mod_summary_outliers <- as.data.frame(model.sel(dredge(mod_full)))
 # rather than subset models where delta is less than 2, just going to subset the top 4 to illustrate the point
 mod_summary_outliers_subset <- mod_summary_outliers[1:4,]
 
-write.csv(mod_summary_outliers_subset, file = "new_model_with_outliers.csv")
+# write.csv(mod_summary_outliers_subset, file = "new_model_with_outliers.csv")
 
 
 
@@ -211,6 +227,53 @@ summary(mod_hala)
 Anova(mod_hala) 
 # Hala_scale X2 = 6.6126, P = 0.01013 *
 
+
+mod_us <- glmmTMB(Larger_sapling_ratio  ~ Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(mod_us)
+plot(simulateResiduals(mod_us)) # some issues in lower quartile, but not too bad
+Anova(mod_us)
+#                      Chisq Df Pr(>Chisq)
+# Invasive_understory 1.9903  1     0.1583
+
+mod_null <- glmmTMB(Larger_sapling_ratio  ~ 1 + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(mod_null)
+# Conditional model:
+#             Estimate Std. Error z value Pr(>|z|)  
+# (Intercept)   0.5168     0.2654   1.947   0.0515 
+plot(simulateResiduals(mod_null)) # no issues
+
+mod_hs_us <- glmmTMB(Larger_sapling_ratio  ~ Hala_scale + Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(mod_hs_us)
+plot(simulateResiduals(mod_hs_us)) # some issues in lower quantile but still not too bad
+Anova(mod_hs_us)
+#                      Chisq Df Pr(>Chisq)  
+# Hala_scale          2.8318  1    0.09242 .
+# Invasive_understory 0.4494  1    0.50261  
+
+mod_hs_us_x <- glmmTMB(Larger_sapling_ratio  ~ Hala_scale*Invasive_understory + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(mod_hs_us_x)
+plot(simulateResiduals(mod_hs_us_x)) # some issues in lower quantile but still not too bad
+Anova(mod_hs_us_x)
+
+#                                 Chisq Df Pr(>Chisq)  
+# Hala_scale                     3.0077  1    0.08287 .
+# Invasive_understory            0.4168  1    0.51855  
+# Hala_scale:Invasive_understory 0.3452  1    0.55684  
+
+mod_hs_us_cc <- glmmTMB(Larger_sapling_ratio  ~ Hala_scale + Invasive_understory + Canopy_coverage + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(mod_hs_us_cc)
+plot(simulateResiduals(mod_hs_us_cc)) # no issues
+Anova(mod_hs_us_cc)
+#                      Chisq Df Pr(>Chisq)  
+# Hala_scale          2.9597  1    0.08536 .
+# Invasive_understory 0.3955  1    0.52940  
+# Canopy_coverage     0.1912  1    0.66191  
+
+
+```
+
+```{r just hala plot}
+# plot of top model
 (hala_plot <- ggplot(data_sub) +
   geom_violin(aes(x = Hala_scale, y = Larger_sapling_ratio), draw_quantiles = c(0, 0.25, 0.5, 0.75)) +
   geom_jitter(aes(x = Hala_scale, y = Larger_sapling_ratio), width = 0.1) +
@@ -293,10 +356,27 @@ View(reproductive_mod_summary) # top model includes just canopy cover
 reproductive_mod_summary_subset <- reproductive_mod_summary[reproductive_mod_summary$delta < 2,]
 # write.csv(reproductive_mod_summary_subset, file = "pre_reproductive_ratio.csv")
 
+
+
+```
+
+```{r alternative reprod models}
 # top model
 reproductive_mod_2 <- glmmTMB(Pre.reproductive_ratio  ~ Canopy_coverage + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
 summary(reproductive_mod_2) # same zero inflated component as before
-Anova(reproductive_mod_2) # X2 = 3.6, P = 0.058
+Anova(reproductive_mod_2) 
+#                 Chisq Df Pr(>Chisq)  
+# Canopy_coverage 3.593  1    0.05802 .
+
+# null model - 2nd best
+reproductive_mod_null <- glmmTMB(Pre.reproductive_ratio  ~ 1 + (1|Location), family = ziGamma("log"), ziformula = ~1, data = data_sub, na.action = na.pass)
+summary(reproductive_mod_null) # same zero inflated component as before
+# Conditional model:
+#             Estimate Std. Error z value Pr(>|z|)
+# (Intercept)  0.03883    0.28629   0.136    0.892
+```
+
+```{r top model plot}
 
 reprod_canopy_effects <- emmip(reproductive_mod_2, ~ Canopy_coverage, at = list(Canopy_coverage = seq(24,100,0.5)), CIs = T, plotit = F)
 
